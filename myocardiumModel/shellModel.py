@@ -623,12 +623,13 @@ class shellModel:
         sliceInterval_new, sliceRadius_new, coord, point = self.simpleStretch(sliceStretch=sliceStretch)
         return sliceInterval_new, sliceRadius_new, coord, point
     
-    def borderEndSystoleSolver(self, surface='inner', volume=None, stretch_radial=None, error=0.005, inc=0.1, stlName=None, sliceNum=None, slicePoint=None, sliceRadius=None, sliceInterval=None):
+    def borderEndSystoleSolver(self, surface='inner', volume=None, stretch_radial=None, error=0.005, inc=0.1, minVolume=500, stlName=None, sliceNum=None, slicePoint=None, sliceRadius=None, sliceInterval=None):
         '''
         achieve myocardium incompressibility by reducing the volume error
         adjust stretch_radial to achieve
         surface: inner or outer
         volume [shell_ED volume, shell_ES volume, inner_ED volume/outer_ED volume]
+        minVolume (mm3): min volume of ES inner surface, avoid STL issue
         '''
         volume_myoc = abs(volume[0]-volume[2])
         if type(stretch_radial)==type(None):
@@ -643,6 +644,8 @@ class shellModel:
                     return volume_ES
                 coord,connect = self.STLgeneration(coord=self.innerCoord_ES, sliceNum=self.sliceNum_inner, slicePoint=self.slicePoint_inner,stlName = stlName)
                 volume_ES = self.STLvolume(coord=coord,connect=connect)
+                if volume_ES<=minVolume:
+                    return volume_ES
             elif surface =='outer':
                 self.outerSurface_ES(stretch_radial = stretch_radial)
                 coord,connect = self.STLgeneration(coord=self.outerCoord_ES, sliceNum=self.sliceNum_outer, slicePoint=self.slicePoint_outer,stlName = stlName)
