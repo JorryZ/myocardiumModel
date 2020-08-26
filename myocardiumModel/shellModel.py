@@ -11,7 +11,7 @@ History:
     Date    Programmer SAR# - Description
     ---------- ---------- ----------------------------
   Author: jorry.zhengyu@gmail.com         29July2020           -V1.0.0 Created, test version
-  Author: jorry.zhengyu@gmail.com         26AUGU2020           -V1.0.1, test version, improve innerSurface_ES function to solve inner_ES STL volume error
+  Author: jorry.zhengyu@gmail.com         26AUGU2020           -V1.0.1, test version, improve innerSurface_ES function to solve inner_ES STL volume error, point_ES error
 """
 print('shellModel test version 1.0.1')
 
@@ -292,8 +292,9 @@ class shellModel:
         
         coord,point = self.surfaceGeneration(sliceNum=sliceNum, slicePoint=slicePoint, sliceRadius=sliceRadius_inner, sliceInterval=sliceInterval)
         
-        coord[:,2] = coord[:,2] + self.shellCoord_ES[0,2]-coord[0,2]
-        point[:,2] = point[:,2] + self.shellCoord_ES[0,2]-coord[0,2]
+        temp = self.shellCoord_ES[0,2]-coord[0,2]
+        coord[:,2] = coord[:,2] + temp
+        point[:,2] = point[:,2] + temp
 #        coord[:,2] = coord[:,2] + self.innerCoord[-1,2]
 #        point[:,2] = point[:,2] + self.innerCoord[-1,2]
         self.sliceRadius_inner_ES = sliceRadius_inner.copy()
@@ -371,8 +372,9 @@ class shellModel:
         
         coord,point = self.surfaceGeneration(sliceNum=sliceNum, slicePoint=slicePoint, sliceRadius=sliceRadius_outer, sliceInterval=sliceInterval)
         
-        coord[:,2] = coord[:,2] + self.shellCoord_ES[0,2]-coord[0,2]
-        point[:,2] = point[:,2] + self.shellCoord_ES[0,2]-coord[0,2]
+        temp = self.shellCoord_ES[0,2]-coord[0,2]
+        coord[:,2] = coord[:,2] + temp
+        point[:,2] = point[:,2] + temp
 #        coord[:,2] = coord[:,2] + self.innerCoord[-1,2]
 #        point[:,2] = point[:,2] + self.innerCoord[-1,2]
         self.sliceRadius_outer_ES = sliceRadius_outer.copy()
