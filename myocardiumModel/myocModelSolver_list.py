@@ -73,8 +73,12 @@ for s in range(len(RWT_normal)):
                 temp2.append(int(slicePoint[i]))
             slicePoint=temp2.copy()
             slicePoint.reverse()
-            sliceRadius=temp[0] * ratio     # mm unit
-            sliceRadius.reverse()
+            
+            temp2 = temp[0].copy()
+            temp2.reverse()
+            sliceRadius=np.array(temp2) * ratio     # mm unit
+            #sliceRadius=temp[0] * ratio     # mm unit
+            #sliceRadius.reverse()
             zAxis=temp[2]
             
             zAxis.reverse()
