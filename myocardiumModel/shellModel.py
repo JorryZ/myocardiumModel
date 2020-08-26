@@ -270,6 +270,8 @@ class shellModel:
         for i in range(sliceNum-1):
             temp = sliceRadius[i]-stretch_radial[i]*(self.sliceRadius[i]-self.sliceRadius_inner[i])
             if temp<=0 and flag == 0:
+                if i == 0:      # inner surface can't be smaller
+                    return 1    # special return
                 flag = 1
                 negativeSlice = i
                 lastRadius = sliceRadius_inner[-1]
@@ -301,6 +303,7 @@ class shellModel:
         self.sliceInterval_inner_ES = sliceInterval.copy()
         self.innerCoord_ES = coord.copy()
         self.innerPoint_ES = point.copy()
+        return 0    # normal return
     
     def outerSurface(self,sliceNum=None, slicePoint=None, sliceRadius=None, sliceInterval=None, thickness=None):
         if type(sliceNum)==type(None):
@@ -635,7 +638,9 @@ class shellModel:
         error_ite = (volume_myoc-abs(volume[1]-volume_ES))/volume_myoc
         while abs(error_ite)>error:
             if surface=='inner':
-                self.innerSurface_ES(stretch_radial = stretch_radial)
+                index = self.innerSurface_ES(stretch_radial = stretch_radial)
+                if index == 1:      # special return, stop iteration
+                    return volume_ES
                 coord,connect = self.STLgeneration(coord=self.innerCoord_ES, sliceNum=self.sliceNum_inner, slicePoint=self.slicePoint_inner,stlName = stlName)
                 volume_ES = self.STLvolume(coord=coord,connect=connect)
             elif surface =='outer':
