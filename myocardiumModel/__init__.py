@@ -9,6 +9,8 @@ History:
     ---------- ---------- ----------------------------
   Author: jorry.zhengyu@gmail.com         29July2020             -V1.0.0 test version
                                                         -myocardiumModel version 1.0.0
+  Author: jorry.zhengyu@gmail.com         26AUGU2020             -V1.0.1 test version
+                                                        -myocardiumModel version 1.0.1                                                        
                                                         
 Requirements:
     numpy
@@ -17,7 +19,7 @@ Requirements:
     meshplex
 All rights reserved.
 """
-_version='1.0.0'
+_version='1.0.1'
 print('myocardiumModel version',_version)
 
 import os
