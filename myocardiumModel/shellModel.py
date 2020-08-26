@@ -11,8 +11,9 @@ History:
     Date    Programmer SAR# - Description
     ---------- ---------- ----------------------------
   Author: jorry.zhengyu@gmail.com         29July2020           -V1.0.0 Created, test version
+  Author: jorry.zhengyu@gmail.com         26AUGU2020           -V1.0.1, test version, improve innerSurface_ES function to solve inner_ES STL volume error
 """
-print('shellModel test version 1.0.0')
+print('shellModel test version 1.0.1')
 
 #import os
 import sys
@@ -272,13 +273,22 @@ class shellModel:
                 flag = 1
                 negativeSlice = i
                 lastRadius = sliceRadius_inner[-1]
-                increment = lastRadius/(sliceNum-negativeSlice)
+                increment = lastRadius/(sliceNum-negativeSlice)     # modified radius
             if flag == 0:
                 sliceRadius_inner.append(temp)
             else:
                 temp = lastRadius-increment*(i-negativeSlice+1)
                 sliceRadius_inner.append(temp)
+                
+                temp = sliceInterval[i-2]*(sliceRadius_inner[-2]-sliceRadius_inner[-1])/(sliceRadius_inner[-3]-sliceRadius_inner[-2])
+                sliceInterval[i-1] = temp
         sliceRadius_inner.append(0)
+        
+        #if flag == 1:
+            #temp = sliceInterval[-2]*(sliceRadius_inner[-2]-sliceRadius_inner[-1])/(sliceRadius_inner[-3]-sliceRadius_inner[-2])
+            #sliceInterval[-1] = temp
+        temp = sliceInterval[-2]*(sliceRadius_inner[-2]-sliceRadius_inner[-1])/(sliceRadius_inner[-3]-sliceRadius_inner[-2])
+        sliceInterval[-1] = temp
         
         coord,point = self.surfaceGeneration(sliceNum=sliceNum, slicePoint=slicePoint, sliceRadius=sliceRadius_inner, sliceInterval=sliceInterval)
         
