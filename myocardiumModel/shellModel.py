@@ -539,9 +539,10 @@ class shellModel:
             for i in range(sliceNum-1):
                 sliceInterval_new[i] = sliceInterval[i]*sliceStretch[i,0]
             
-    def strainCalculation(self,point_ED=None,point_ES=None):
+    def strainCalculation(self,point_ED=None,point_ES=None, strain_border = False):
         '''
         calculate stretch and strain
+        lengthStrain: longitudinal strain calculated by total length change
         '''
         if type(point_ED)==type(None):
             point_ED = self.shellPoint.copy()
@@ -563,6 +564,11 @@ class shellModel:
             temp2.append(temp[i,i+1])
         dist_ES = temp2.copy()
         dist_ES = np.array(dist_ES)
+        
+        if strain_border==True:
+            stretch = np.sum(dist_ES)/np.sum(dist_ED)
+            strain = 0.5*(stretch**2-1)
+            return stretch, strain
         
         stretch_longit = dist_ES/dist_ED
         stretch_radial = 1/stretch_longit/stretch_circum
