@@ -252,9 +252,10 @@ class shellModel:
         '''
         print('innerSurface completed >_<')
     
-    def innerSurface_ES(self,sliceNum=None, slicePoint=None, sliceRadius=None, sliceInterval=None, stretch_radial=None):
+    def innerSurface_ES(self,sliceNum=None, slicePoint=None, sliceRadius=None, sliceInterval=None, stretch_radial=None, mode='smooth'):
         '''
         simplified inner surface motion, use radial stretch to calculate radius (not same direction, especially apical part)
+        mode: 'shape' to maintain the ES inner surface length, 'smooth' to obtain smoother ES inner STL
         '''
         if type(sliceNum)==type(None):
             sliceNum = self.sliceNum_inner
@@ -276,21 +277,34 @@ class shellModel:
                 negativeSlice = i
                 lastRadius = sliceRadius_inner[-1]
                 increment = lastRadius/(sliceNum-negativeSlice)     # modified radius
+                
+                # decrement for 'shape' mode
+                stretch_radial_mean = np.mean(stretch_radial)
+                apexLength_ED = abs(self.shellCoord[-1,2] - self.innerCoord[-1,2])
+                apexLength_ES = apexLength_ED * stretch_radial_mean
+                length_reduce = apexLength_ES - apexLength_ED
+                decrement = length_reduce/(sliceNum-negativeSlice)
             if flag == 0:
                 sliceRadius_inner.append(temp)
             else:
                 temp = lastRadius-increment*(i-negativeSlice+1)
                 sliceRadius_inner.append(temp)
                 
-                temp = sliceInterval[i-2]*(sliceRadius_inner[-2]-sliceRadius_inner[-1])/(sliceRadius_inner[-3]-sliceRadius_inner[-2])
-                sliceInterval[i-1] = temp
+                if mode == 'smooth':
+                    temp = sliceInterval[i-2]*(sliceRadius_inner[-2]-sliceRadius_inner[-1])/(sliceRadius_inner[-3]-sliceRadius_inner[-2])
+                    sliceInterval[i-1] = temp
+                elif mode == 'shape':
+                    sliceInterval[i-1] = sliceInterval[i-1]-decrement
         sliceRadius_inner.append(0)
         
         #if flag == 1:
             #temp = sliceInterval[-2]*(sliceRadius_inner[-2]-sliceRadius_inner[-1])/(sliceRadius_inner[-3]-sliceRadius_inner[-2])
             #sliceInterval[-1] = temp
-        temp = sliceInterval[-2]*(sliceRadius_inner[-2]-sliceRadius_inner[-1])/(sliceRadius_inner[-3]-sliceRadius_inner[-2])
-        sliceInterval[-1] = temp
+        if mode == 'smooth':
+            temp = sliceInterval[-2]*(sliceRadius_inner[-2]-sliceRadius_inner[-1])/(sliceRadius_inner[-3]-sliceRadius_inner[-2])
+            sliceInterval[-1] = temp
+        elif mode == 'shape':
+            sliceInterval[-1] = sliceInterval[-1]-decrement
         
         coord,point = self.surfaceGeneration(sliceNum=sliceNum, slicePoint=slicePoint, sliceRadius=sliceRadius_inner, sliceInterval=sliceInterval)
         
@@ -629,7 +643,7 @@ class shellModel:
         sliceInterval_new, sliceRadius_new, coord, point = self.simpleStretch(sliceStretch=sliceStretch)
         return sliceInterval_new, sliceRadius_new, coord, point
     
-    def borderEndSystoleSolver(self, surface='inner', volume=None, stretch_radial=None, error=0.005, inc=0.1, minVolume=500, stlName=None, sliceNum=None, slicePoint=None, sliceRadius=None, sliceInterval=None):
+    def borderEndSystoleSolver(self, surface='inner', volume=None, stretch_radial=None, error=0.005, inc=0.1, minVolume=300, mode='smooth', stlName=None, sliceNum=None, slicePoint=None, sliceRadius=None, sliceInterval=None):
         '''
         achieve myocardium incompressibility by reducing the volume error
         adjust stretch_radial to achieve
@@ -645,7 +659,7 @@ class shellModel:
         error_ite = (volume_myoc-abs(volume[1]-volume_ES))/volume_myoc
         while abs(error_ite)>error:
             if surface=='inner':
-                index = self.innerSurface_ES(stretch_radial = stretch_radial)
+                index = self.innerSurface_ES(stretch_radial = stretch_radial, mode=mode)
                 if index == 1:      # special return, stop iteration
                     return volume_ES
                 coord,connect = self.STLgeneration(coord=self.innerCoord_ES, sliceNum=self.sliceNum_inner, slicePoint=self.slicePoint_inner,stlName = stlName)
