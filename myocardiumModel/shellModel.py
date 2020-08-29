@@ -11,9 +11,9 @@ History:
     Date    Programmer SAR# - Description
     ---------- ---------- ----------------------------
   Author: jorry.zhengyu@gmail.com         29July2020           -V1.0.0 Created, test version
-  Author: jorry.zhengyu@gmail.com         26AUGU2020           -V1.0.1, test version, improve innerSurface_ES function to solve inner_ES STL volume error, point_ES error
+  Author: jorry.zhengyu@gmail.com         26AUGU2020           -V1.0.1, release version, improve innerSurface_ES function to solve inner_ES STL volume error, point_ES error
 """
-print('shellModel test version 1.0.1')
+print('shellModel release version 1.0.1')
 
 #import os
 import sys
