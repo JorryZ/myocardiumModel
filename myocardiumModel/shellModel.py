@@ -12,8 +12,9 @@ History:
     ---------- ---------- ----------------------------
   Author: jorry.zhengyu@gmail.com         29July2020           -V1.0.0 Created, test version
   Author: jorry.zhengyu@gmail.com         26AUGU2020           -V1.0.1, release version, improve innerSurface_ES function to solve inner_ES STL volume error, point_ES error
+  Author: jorry.zhengyu@gmail.com         29AUGU2020           -V1.0.2, release version, add thickRatio for inner and outer ED surface for thickness ajustment
 """
-print('shellModel release version 1.0.1')
+print('shellModel release version 1.0.2')
 
 #import os
 import sys
@@ -170,7 +171,11 @@ class shellModel:
         '''
         print('shellSurface completed >_<')
         
-    def innerSurface(self,sliceNum=None, slicePoint=None, sliceRadius=None, sliceInterval=None, thickness=None):
+    def innerSurface(self,sliceNum=None, slicePoint=None, sliceRadius=None, sliceInterval=None, thickness=None, thickRatio=1.):
+        '''
+        control thickness to obtain inner surface
+        thickRatio = thick_apex/thick_basal
+        '''
         if type(sliceNum)==type(None):
             sliceNum = self.sliceNum
         if type(slicePoint)==type(None):
@@ -186,7 +191,13 @@ class shellModel:
             self.thickness_inner = temp
         else:
             self.thickness_inner = thickness
-        
+        if thickRatio > 1:
+            pass
+        elif abs(thickRatio-1.)!=0.:
+            decrement = (thickRatio-1)/(sliceNum-1)
+            ratio = np.arange(1.,thickRatio+decrement,decrement)
+            self.thickness_inner = self.thickness_inner*ratio
+            
         # use coordGeneration function
         radiusInner = []
         lastSlice = 0
@@ -319,7 +330,11 @@ class shellModel:
         self.innerPoint_ES = point.copy()
         return 0    # normal return
     
-    def outerSurface(self,sliceNum=None, slicePoint=None, sliceRadius=None, sliceInterval=None, thickness=None):
+    def outerSurface(self,sliceNum=None, slicePoint=None, sliceRadius=None, sliceInterval=None, thickness=None, thickRatio=1.):
+        '''
+        control thickness to obtain inner surface
+        thickRatio = thick_apex/thick_basal
+        '''
         if type(sliceNum)==type(None):
             sliceNum = self.sliceNum
         if type(slicePoint)==type(None):
@@ -335,6 +350,12 @@ class shellModel:
             self.thickness_outer = temp
         else:
             self.thickness_outer = thickness
+        if thickRatio > 1:
+            pass
+        elif abs(thickRatio-1.)!=0.:
+            decrement = (thickRatio-1)/(sliceNum-1)
+            ratio = np.arange(1.,thickRatio+decrement,decrement)
+            self.thickness_outer = self.thickness_outer*ratio
         
         # use coordGeneration function
         radiusOuter = []
