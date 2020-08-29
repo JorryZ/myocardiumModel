@@ -8,9 +8,11 @@ History:
     Date    Programmer SAR# - Description
     ---------- ---------- ----------------------------
   Author: jorry.zhengyu@gmail.com         29July2020             -V1.0.0 test version
-                                                        -myocardiumModel version 1.0.0
+                                                        -shellModel version 1.0.0
   Author: jorry.zhengyu@gmail.com         26AUGU2020             -V1.0.1 release version
-                                                        -myocardiumModel version 1.0.1                                                        
+                                                        -shellModel version 1.0.1 
+  Author: jorry.zhengyu@gmail.com         29AUGU2020             -V1.0.2 release version
+                                                        -shellModel version 1.0.2                                        
                                                         
 Requirements:
     numpy
@@ -19,7 +21,7 @@ Requirements:
     meshplex
 All rights reserved.
 """
-_version='1.0.1'
+_version='1.0.2'
 print('myocardiumModel version',_version)
 
 import os
