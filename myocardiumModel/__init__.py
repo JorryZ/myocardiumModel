@@ -9,7 +9,7 @@ History:
     ---------- ---------- ----------------------------
   Author: jorry.zhengyu@gmail.com         29July2020             -V1.0.0 test version
                                                         -myocardiumModel version 1.0.0
-  Author: jorry.zhengyu@gmail.com         26AUGU2020             -V1.0.1 test version
+  Author: jorry.zhengyu@gmail.com         26AUGU2020             -V1.0.1 release version
                                                         -myocardiumModel version 1.0.1                                                        
                                                         
 Requirements:
