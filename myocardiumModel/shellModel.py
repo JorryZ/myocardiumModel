@@ -12,7 +12,7 @@ History:
     ---------- ---------- ----------------------------
   Author: jorry.zhengyu@gmail.com         29July2020           -V1.0.0 Created, test version
   Author: jorry.zhengyu@gmail.com         26AUGU2020           -V1.0.1, release version, improve innerSurface_ES function to solve inner_ES STL volume error, point_ES error
-  Author: jorry.zhengyu@gmail.com         29AUGU2020           -V1.0.2, release version, add thickRatio for inner and outer ED surface for thickness ajustment
+  Author: jorry.zhengyu@gmail.com         29AUGU2020           -V1.0.2, release version, add thickRatio for inner and outer ED surface for thickness ajustment, different strain calculation
 """
 print('shellModel release version 1.0.2')
 
@@ -574,10 +574,11 @@ class shellModel:
             for i in range(sliceNum-1):
                 sliceInterval_new[i] = sliceInterval[i]*sliceStretch[i,0]
             
-    def strainCalculation(self,point_ED=None,point_ES=None, strain_border = False):
+    def strainCalculation(self,point_ED=None,point_ES=None, strain_type = 'green', strain_border = False):
         '''
         calculate stretch and strain
-        lengthStrain: longitudinal strain calculated by total length change
+        strain_type: 'green' strain or 'engineering' strain
+        strain_border: longitudinal strain calculated by total length if True
         '''
         if type(point_ED)==type(None):
             point_ED = self.shellPoint.copy()
@@ -602,15 +603,23 @@ class shellModel:
         
         if strain_border==True:
             stretch = np.sum(dist_ES)/np.sum(dist_ED)
-            strain = 0.5*(stretch**2-1)
+            if strain_type == 'green':
+                strain = 0.5*(stretch**2-1)
+            elif strain_type == 'engineering':
+                strain = stretch -1
             return stretch, strain
         
         stretch_longit = dist_ES/dist_ED
         stretch_radial = 1/stretch_longit/stretch_circum
         
-        strain_longit = 0.5*(stretch_longit**2-1)
-        strain_circum = 0.5*(stretch_circum**2-1)
-        strain_radial = 0.5*(stretch_radial**2-1)
+        if strain_type == 'green':
+            strain_longit = 0.5*(stretch_longit**2-1)
+            strain_circum = 0.5*(stretch_circum**2-1)
+            strain_radial = 0.5*(stretch_radial**2-1)
+        elif strain_type == 'engineering':
+            strain_longit = stretch_longit-1
+            strain_circum = stretch_circum-1
+            strain_radial = stretch_radial-1
         
         temp = np.concatenate((stretch_longit,stretch_circum,stretch_radial))
         temp2 = temp.reshape((-1,3), order='F')
