@@ -10,7 +10,7 @@ Modules: numpy, scipy, trimesh, meshplex
 History:
     Date    Programmer SAR# - Description
     ---------- ---------- ----------------------------
-  Author: jorry.zhengyu@gmail.com         29July2020           -V1.0.0 Created, test version
+  Author: jorry.zhengyu@gmail.com         29July2020           -V1.0.0 Created, test version, horizontal radial stretch
   Author: jorry.zhengyu@gmail.com         26AUGU2020           -V1.0.1, release version, improve innerSurface_ES function to solve inner_ES STL volume error, point_ES error
   Author: jorry.zhengyu@gmail.com         29AUGU2020           -V1.0.2, release version, add thickRatio for inner and outer ED surface for thickness ajustment, different strain calculation
 """
