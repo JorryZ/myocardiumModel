@@ -13,8 +13,9 @@ History:
   Author: jorry.zhengyu@gmail.com         29July2020           -V1.0.0 Created, test version, horizontal radial stretch
   Author: jorry.zhengyu@gmail.com         26AUGU2020           -V1.0.1, release version, improve innerSurface_ES function to solve inner_ES STL volume error, point_ES error
   Author: jorry.zhengyu@gmail.com         29AUGU2020           -V1.0.2, release version, add thickRatio for inner and outer ED surface for thickness ajustment, different strain calculation
+  Author: jorry.zhengyu@gmail.com         05Sept2020           -V2.0.0 Algorithm improvement, test version, radial direction using shell surface normal
 """
-print('shellModel release version 1.0.2')
+print('shellModel release version 2.0.0')
 
 #import os
 import sys
@@ -36,6 +37,20 @@ def normalize_v3(arr):
     arr[:,1] /= lens
     arr[:,2] /= lens                
     return arr
+
+def normalize_v2(a):
+    #a = np.array(a)
+    b = np.zeros(np.shape(a))
+    for i in range(len(b)):
+        b[i,:] = a[i,:]/np.linalg.norm(a[i,:])
+    return b
+
+def perpendicular( a ) :
+    b = np.zeros(np.shape(a))
+    for i in range(len(b)):
+        b[i,0] = a[i,1]
+        b[i,1] = -a[i,0]
+    return b
 
 class shellModel:
     def __new__(cls, *args, **kwargs):
@@ -69,14 +84,16 @@ class shellModel:
         self.innerCoord = None
         self.innerPoint = None
         self.connectivity_inner = None
+        self.radialDirection_inner = None
         
-#        self.thickness_inner_ES = None
+        self.thickness_inner_ES = None
 #        self.sliceNum_inner_ES = None
 #        self.slicePoint_inner_ES = None
         self.sliceRadius_inner_ES = None
         self.sliceInterval_inner_ES = None
         self.innerCoord_ES = None
         self.innerPoint_ES = None
+        self.index = 0
         
         # outer part
         self.thickness_outer = None
@@ -87,6 +104,7 @@ class shellModel:
         self.outerCoord = None
         self.outerPoint = None
         self.connectivity_outer = None
+        self.radialDirection_outer = None
         
         self.sliceRadius_outer_ES = None
         self.sliceInterval_outer_ES = None
@@ -96,7 +114,19 @@ class shellModel:
         self.connectivity = None
         
         print('shellModel_init_ done')
-        
+    
+    def radialDirection(self, shellPoint = None):
+        '''
+        calculate radial direction based on the longitudinal direction
+        shellPoint [n,3], but y coordinates are 0
+        '''
+        longitDirection = np.zeros((len(shellPoint)-1,2))
+        longitDirection[:,0] = shellPoint[1:,0] - shellPoint[:-1,0]
+        longitDirection[:,1] = shellPoint[1:,2] - shellPoint[:-1,2]
+        temp = normalize_v2(longitDirection)
+        radialDirection = perpendicular(temp)
+        return radialDirection
+    
     def surfaceGeneration(self,sliceNum=None,slicePoint=None,sliceRadius=None,sliceInterval=None):
         temp = []       # all the points
         temp3 = []      # one point each slice
@@ -122,6 +152,34 @@ class shellModel:
         temp4 = np.array(temp3)
         return temp2,temp4
         
+    
+    def simpleStretch(self, sliceNum=None, slicePoint=None, sliceRadius=None, sliceInterval=None, sliceStretch=None):
+        '''
+        simple stretch: change interval (first) and radius to achieve movement, shell ES surface
+        sliceStretch: stretch values for each slice or each point, [n, 2]
+        '''
+        if type(sliceNum)==type(None):
+            sliceNum = self.sliceNum
+        if type(slicePoint)==type(None):
+            slicePoint = self.slicePoint.copy()
+        if type(sliceRadius)==type(None):
+            sliceRadius = self.sliceRadius.copy()
+        if type(sliceInterval)==type(None):
+            sliceInterval = self.sliceInterval.copy()
+            
+        sliceRadius_new = sliceRadius.copy()
+        sliceInterval_new = sliceInterval.copy()
+        
+        for i in range(sliceNum-1):
+            sliceInterval_new[i] = sliceInterval[i]*sliceStretch[i,0]
+            sliceRadius_new[i] = sliceRadius[i]*sliceStretch[i,1]
+            
+        coord,point = self.surfaceGeneration(sliceNum=sliceNum, slicePoint=slicePoint, sliceRadius=sliceRadius_new, sliceInterval=sliceInterval_new)
+#        self.shellCoord_ES = coord.copy()
+#        self.shellPoint_ES = point.copy()
+        return sliceInterval_new, sliceRadius_new, coord, point
+    
+    
     def shellSurface(self,sliceNum=None,slicePoint=None,sliceRadius=None,sliceInterval=None):
         self.sliceNum = sliceNum
         if type(slicePoint) == int and sliceNum>1:
@@ -171,19 +229,16 @@ class shellModel:
         '''
         print('shellSurface completed >_<')
         
-    def innerSurface(self,sliceNum=None, slicePoint=None, sliceRadius=None, sliceInterval=None, thickness=None, thickRatio=1.):
+        
+    def innerSurface(self,sliceNum=None, slicePoint=None, thickness=None, thickRatio=1.):
         '''
-        control thickness to obtain inner surface
+        use thickness to obtain inner ED surface
         thickRatio = thick_apex/thick_basal
         '''
         if type(sliceNum)==type(None):
             sliceNum = self.sliceNum
         if type(slicePoint)==type(None):
             slicePoint = self.slicePoint.copy()
-        if type(sliceRadius)==type(None):
-            sliceRadius = self.sliceRadius.copy()
-        if type(sliceInterval)==type(None):
-            sliceInterval = self.sliceInterval.copy()
         
         if type(thickness) == int or type(thickness) == float and self.sliceNum>1:
 #        if len(thickness) == 1 and self.sliceNum>1:
@@ -197,33 +252,22 @@ class shellModel:
             decrement = (thickRatio-1)/(sliceNum-1)
             ratio = np.arange(1.,thickRatio+decrement,decrement)
             self.thickness_inner = self.thickness_inner*ratio
-            
-        # use coordGeneration function
-        radiusInner = []
-        lastSlice = 0
-        for i in range(sliceNum-1):
-            if (sliceRadius[i] - self.thickness_inner[i])>=0 and (sliceRadius[i+1] - self.thickness_inner[i+1])<0:
-                z = np.sum(sliceInterval[i:])
-                sliceNum_inner = i+1
-                radiusInner.append(0)
-                lastSlice = 1
-                break
-            radius = sliceRadius[i] - self.thickness_inner[i]
-            radiusInner.append(radius)
-        if lastSlice==0:
-            sliceNum_inner = sliceNum
-            radiusInner.append(0)
-            
-        self.sliceNum_inner = sliceNum_inner
-        temp = slicePoint[0:self.sliceNum_inner]
-        self.slicePoint_inner = temp.copy()
-        self.slicePoint_inner[-1] = 1
-        self.sliceRadius_inner = np.array(radiusInner).copy()
-        temp = sliceInterval[0:self.sliceNum_inner-1]
-        if lastSlice==0:
-            temp2=temp[-1]/2
-            temp[-1]=temp2
-        self.sliceInterval_inner = temp.copy()
+        
+        shellPoint = self.shellPoint.copy()
+        radialDirection = self.radialDirection(shellPoint)
+        innerPoint = np.zeros(np.shape(shellPoint))
+        innerPoint[:-1,0] = self.thickness_inner[:-1]*radialDirection[:,0] + shellPoint[:-1,0]
+        innerPoint[:-1,2] = self.thickness_inner[:-1]*radialDirection[:,1] + shellPoint[:-1,2]
+        innerPoint[-1,2] = self.thickness_inner[-1] + shellPoint[-1,2]
+        
+        self.sliceNum_inner = sliceNum
+        self.slicePoint_inner = slicePoint.copy()
+        self.sliceRadius_inner = np.array(innerPoint[:,0]).copy()
+        self.radialDirection_inner = radialDirection.copy()
+        
+        z = innerPoint[-1,2]
+        sliceInterval_inner = innerPoint[:-1,2] - innerPoint[1:,2]
+        self.sliceInterval_inner = sliceInterval_inner.copy()
         
         coord,point = self.surfaceGeneration(sliceNum=self.sliceNum_inner, slicePoint=self.slicePoint_inner, sliceRadius=self.sliceRadius_inner, sliceInterval=self.sliceInterval_inner)
         coord[:,2] = coord[:,2] + z
@@ -231,42 +275,13 @@ class shellModel:
         self.innerCoord = coord.copy()
         self.innerPoint = point.copy()
         
-        '''
-        temp = []
-        radiusInner = []
-        for i in range(sliceNum):
-            if (sliceRadius[i] - self.thickness_inner[i])>=0 and (sliceRadius[i+1] - self.thickness[i+1])<0:
-                z = np.sum(sliceInterval[i:])
-                temp.append([0,0,z])
-                self.sliceNum_inner = i+1
-                radiusInner.append(0)
-                break
-            
-            angle = np.pi*2/slicePoint[i]
-            radius = sliceRadius[i] - self.thickness_inner[i]
-            radiusInner.append(radius)
-            z = np.sum(sliceInterval[i:])
-            
-            for j in range(int(slicePoint[i])):
-                x = radius*np.cos(j*angle)
-                y = radius*np.sin(j*angle)
-                temp.append([x,y,z])
-        
-        temp2 = np.array(temp)
-        self.innerCoord = temp2.copy()
-        temp = slicePoint[0:self.sliceNum_inner]
-        self.slicePoint_inner = temp.copy()
-        self.slicePoint_inner[-1] = 1
-        self.sliceRadius_inner = np.array(radiusInner).copy()
-        temp = sliceInterval[0:self.sliceNum_inner-1]
-        self.sliceInterval_inner = temp.copy()
-        '''
-        print('innerSurface completed >_<')
+        print('innerSurface ED completed >_<')
     
-    def innerSurface_ES(self,sliceNum=None, slicePoint=None, sliceRadius=None, sliceInterval=None, stretch_radial=None, mode='smooth'):
+    def innerSurface_ES(self,sliceNum=None, slicePoint=None, stretch_radial=None, mode='smooth'):
         '''
         simplified inner surface motion, use radial stretch to calculate radius (not same direction, especially apical part)
         mode: 'shape' to maintain the ES inner surface length, 'smooth' to obtain smoother ES inner STL
+        to improve apex shape
         '''
         if type(sliceNum)==type(None):
             sliceNum = self.sliceNum_inner
@@ -275,74 +290,90 @@ class shellModel:
         if type(stretch_radial)==type(None):
             stretch_radial = self.shellStretch[:,2].copy()
         
-        sliceInterval = self.sliceInterval_ES[:(sliceNum-1)]
-        sliceRadius = self.sliceRadius_ES
-        sliceRadius_inner = []
-        flag = 0    # if sliceRadius_inner becomes negative
-        for i in range(sliceNum-1):
-            temp = sliceRadius[i]-stretch_radial[i]*(self.sliceRadius[i]-self.sliceRadius_inner[i])
-            if temp<=0 and flag == 0:
-                if i == 0:      # inner surface can't be smaller
-                    return 1    # special return
+        thickness = self.thickness_inner.copy()
+        thickness[:-1] = stretch_radial*self.thickness_inner[:-1]
+        thickness[-1] = stretch_radial[-1]*self.thickness_inner[-1]
+        self.thickness_inner_ES = thickness.copy()
+        
+        shellPoint = self.shellPoint_ES.copy()
+        #radialDirection = self.radialDirection(shellPoint)     # shell ES surface normal
+        radialDirection = self.radialDirection_inner.copy()     # shell ES surface normal
+        innerPoint = np.zeros(np.shape(shellPoint))
+        innerPoint[:-1,0] = self.thickness_inner_ES[:-1]*radialDirection[:,0] + shellPoint[:-1,0]
+        innerPoint[:-1,2] = self.thickness_inner_ES[:-1]*radialDirection[:,1] + shellPoint[:-1,2]
+        innerPoint[-1,2] = self.thickness_inner_ES[-1] + shellPoint[-1,2]
+        
+        
+        flag = 0    # condition of innerPoint change, 0 no change, 1 only change X, 2 only change Z, 3 change both X and Z
+        
+        # innerPoint X ajustment for bad condition
+        sliceBad = len(innerPoint)
+        for i in range(len(innerPoint)-1):
+            if innerPoint[i,0]<=0:
+                sliceBad = i
+        
+        temp = innerPoint[2:-1,0] - innerPoint[3:,0]
+        for i in range(len(temp)):
+            if temp[i]<=0:
+                sliceBad = np.min([sliceBad, i+3])
+#                sliceBad = i+3
                 flag = 1
-                negativeSlice = i
-                lastRadius = sliceRadius_inner[-1]
-                increment = lastRadius/(sliceNum-negativeSlice)     # modified radius
-                
-                # decrement for 'shape' mode
-                stretch_radial_mean = np.mean(stretch_radial)
-                apexLength_ED = abs(self.shellCoord[-1,2] - self.innerCoord[-1,2])
-                apexLength_ES = apexLength_ED * stretch_radial_mean
-                length_reduce = apexLength_ES - apexLength_ED
-                decrement = length_reduce/(sliceNum-negativeSlice)
-            if flag == 0:
-                sliceRadius_inner.append(temp)
-            else:
-                temp = lastRadius-increment*(i-negativeSlice+1)
-                sliceRadius_inner.append(temp)
-                
-                if mode == 'smooth':
-                    temp = sliceInterval[i-2]*(sliceRadius_inner[-2]-sliceRadius_inner[-1])/(sliceRadius_inner[-3]-sliceRadius_inner[-2])
-                    sliceInterval[i-1] = temp
-                elif mode == 'shape':
-                    sliceInterval[i-1] = sliceInterval[i-1]-decrement
-        sliceRadius_inner.append(0)
+                break
         
-        #if flag == 1:
-            #temp = sliceInterval[-2]*(sliceRadius_inner[-2]-sliceRadius_inner[-1])/(sliceRadius_inner[-3]-sliceRadius_inner[-2])
-            #sliceInterval[-1] = temp
-        if mode == 'smooth':
-            temp = sliceInterval[-2]*(sliceRadius_inner[-2]-sliceRadius_inner[-1])/(sliceRadius_inner[-3]-sliceRadius_inner[-2])
-            sliceInterval[-1] = temp
-        elif mode == 'shape':
-            sliceInterval[-1] = sliceInterval[-1]-decrement
+        if sliceBad < len(innerPoint):
+            for i in range(sliceBad, len(innerPoint)):
+                #innerPoint[i,0] = self.shellPoint_ES[i,0] * innerPoint[sliceBad-1,0]/self.shellPoint_ES[sliceBad-1,0]
+                innerPoint[i,0] = self.innerPoint[i,0] * innerPoint[sliceBad-1,0]/self.innerPoint[sliceBad-1,0]
         
-        coord,point = self.surfaceGeneration(sliceNum=sliceNum, slicePoint=slicePoint, sliceRadius=sliceRadius_inner, sliceInterval=sliceInterval)
+        # innerPoint Z ajustment for bad condition
+        # test
+        sliceBad2 = len(innerPoint)
+        temp = innerPoint[2:-1,2] - innerPoint[3:,2]
+        for i in range(len(temp)):
+            if temp[i]<=0:
+                sliceBad2 = np.min([sliceBad2, i+3])
+                if flag == 0:
+                    flag = 2
+                else:
+                    flag = 3
+#                sliceBad = i+3
+                break
+        if sliceBad2 < len(innerPoint):
+            # adustment 1, fixed apex point
+            for i in range(sliceBad2-3, len(innerPoint)-1):
+                #temp = (innerPoint[i-1,2] - innerPoint[-1,2])*(self.shellPoint_ES[i,2] - self.shellPoint_ES[-1,2])/(self.shellPoint_ES[i-1,2] - self.shellPoint_ES[-1,2])
+                temp = (innerPoint[i-1,2] - innerPoint[-1,2])*(self.innerPoint[i,2] - self.innerPoint[-1,2])/(self.innerPoint[i-1,2] - self.innerPoint[-1,2])
+                innerPoint[i,2] = innerPoint[-1,2] + temp
+            # adustment 2
+#            for i in range(sliceBad2-1, len(innerPoint)):
+#                #temp = (innerPoint[i-2,2] - innerPoint[i-1,2])*(self.shellPoint_ES[i-1,2] - self.shellPoint_ES[i,2])/(self.shellPoint_ES[i-2,2] - self.shellPoint_ES[i-1,2])
+#                temp = (innerPoint[i-2,2] - innerPoint[i-1,2])*(self.innerPoint[i-1,2] - self.innerPoint[i,2])/(self.innerPoint[i-2,2] - self.innerPoint[i-1,2])
+#                innerPoint[i,2] = innerPoint[i-1,2] - temp
         
-        temp = self.shellCoord_ES[0,2]-coord[0,2]
-        coord[:,2] = coord[:,2] + temp
-        point[:,2] = point[:,2] + temp
-#        coord[:,2] = coord[:,2] + self.innerCoord[-1,2]
-#        point[:,2] = point[:,2] + self.innerCoord[-1,2]
-        self.sliceRadius_inner_ES = sliceRadius_inner.copy()
-        self.sliceInterval_inner_ES = sliceInterval.copy()
+        
+        self.sliceRadius_inner_ES = np.array(innerPoint[:,0]).copy()
+        z = innerPoint[-1,2]
+        sliceInterval_inner = innerPoint[:-1,2] - innerPoint[1:,2]
+        self.sliceInterval_inner_ES = sliceInterval_inner.copy()
+        
+        coord,point = self.surfaceGeneration(sliceNum=self.sliceNum_inner, slicePoint=self.slicePoint_inner, sliceRadius=self.sliceRadius_inner_ES, sliceInterval=self.sliceInterval_inner_ES)
+        coord[:,2] = coord[:,2] + z
+        point[:,2] = point[:,2] + z
         self.innerCoord_ES = coord.copy()
         self.innerPoint_ES = point.copy()
-        return 0    # normal return
+        self.flag = flag
+        
+        return flag    # condition return
     
-    def outerSurface(self,sliceNum=None, slicePoint=None, sliceRadius=None, sliceInterval=None, thickness=None, thickRatio=1.):
+    def outerSurface(self,sliceNum=None, slicePoint=None, thickness=None, thickRatio=1.):
         '''
-        control thickness to obtain inner surface
+        use thickness to obtain outer ED surface
         thickRatio = thick_apex/thick_basal
         '''
         if type(sliceNum)==type(None):
             sliceNum = self.sliceNum
         if type(slicePoint)==type(None):
             slicePoint = self.slicePoint.copy()
-        if type(sliceRadius)==type(None):
-            sliceRadius = self.sliceRadius.copy()
-        if type(sliceInterval)==type(None):
-            sliceInterval = self.sliceInterval.copy()
         
         if type(thickness) == int or type(thickness) == float and self.sliceNum>1:
 #        if len(thickness) == 1 and self.sliceNum>1:
@@ -357,68 +388,71 @@ class shellModel:
             ratio = np.arange(1.,thickRatio+decrement,decrement)
             self.thickness_outer = self.thickness_outer*ratio
         
-        # use coordGeneration function
-        radiusOuter = []
-        for i in range(sliceNum):
-            radius = sliceRadius[i] + self.thickness_outer[i]
-            radiusOuter.append(radius)
-        sliceNum_outer = sliceNum+1
-        radiusOuter.append(0)
-            
-        self.sliceNum_outer = sliceNum_outer
-        temp = slicePoint[0:self.sliceNum_outer-1]
-        temp[-1] = temp[-2]
-        temp.append(1)
-        self.slicePoint_outer = temp.copy()
-        #self.slicePoint_outer[-2] = self.slicePoint_outer[-3]
-        self.sliceRadius_outer = np.array(radiusOuter).copy()
-        temp = sliceInterval
-        lastInterval = (radiusOuter[-2]*temp[-1]/(radiusOuter[-3]-radiusOuter[-2]))*2/3
-        temp.append(lastInterval)
-        self.sliceInterval_outer = temp.copy()
+        shellPoint = self.shellPoint.copy()
+        radialDirection = self.radialDirection(shellPoint)
+        radialDirection = radialDirection * (-1)
+        outerPoint = np.zeros(np.shape(shellPoint))
+        outerPoint[:-1,0] = self.thickness_outer[:-1]*radialDirection[:,0] + shellPoint[:-1,0]
+        outerPoint[:-1,2] = self.thickness_outer[:-1]*radialDirection[:,1] + shellPoint[:-1,2]
+        outerPoint[-1,2] = -1*self.thickness_outer[-1] + shellPoint[-1,2]
+        
+        self.sliceNum_outer = sliceNum
+        self.slicePoint_outer = slicePoint.copy()
+        self.sliceRadius_outer = np.array(outerPoint[:,0]).copy()
+        self.radialDirection_outer = radialDirection.copy()
+        
+        z = outerPoint[-1,2]
+        sliceInterval_outer = outerPoint[:-1,2] - outerPoint[1:,2]
+        self.sliceInterval_outer = sliceInterval_outer.copy()
         
         coord,point = self.surfaceGeneration(sliceNum=self.sliceNum_outer, slicePoint=self.slicePoint_outer, sliceRadius=self.sliceRadius_outer, sliceInterval=self.sliceInterval_outer)
-        z = 0-self.sliceInterval_outer[-1]
         coord[:,2] = coord[:,2] + z
         point[:,2] = point[:,2] + z
         self.outerCoord = coord.copy()
         self.outerPoint = point.copy()
-        print('outerSurface completed >_<')
+        
+        print('outerSurface ED completed >_<')
     
-    def outerSurface_ES(self,sliceNum=None, slicePoint=None, sliceRadius=None, sliceInterval=None, stretch_radial=None):
+    def outerSurface_ES(self,sliceNum=None, slicePoint=None, stretch_radial=None, mode='smooth'):
         '''
         simplified outer surface motion, use radial stretch to calculate radius (not same direction, especially apical part)
+        mode: 'shape' to maintain the ES outer surface length, 'smooth' to obtain smoother ES outer STL
+        to improve apex shape
         '''
         if type(sliceNum)==type(None):
-            sliceNum = self.sliceNum_outer
+            sliceNum = self.sliceNum_inner
         if type(slicePoint)==type(None):
             slicePoint = self.slicePoint_outer.copy()
         if type(stretch_radial)==type(None):
             stretch_radial = self.shellStretch[:,2].copy()
         
-        sliceInterval = self.sliceInterval_ES.copy()
-        #temp = self.sliceInterval_ES[-1]/self.sliceInterval[-1]*self.sliceInterval_outer[-1]
-        temp = self.sliceInterval_outer[-1]
-        sliceInterval.append(temp)
-        sliceRadius = self.sliceRadius_ES
-        sliceRadius_outer = []
-        for i in range(sliceNum-2):
-            sliceRadius_outer.append(sliceRadius[i]-stretch_radial[i]*(self.sliceRadius[i]-self.sliceRadius_outer[i]))
-        temp = self.sliceRadius_outer[-2]*sliceRadius_outer[-1]/self.sliceRadius_outer[-3]
-        sliceRadius_outer.append(temp)
-        sliceRadius_outer.append(0)
+        thickness = self.thickness_outer.copy()
+        thickness[:-1] = stretch_radial*self.thickness_outer[:-1]
+        thickness[-1] = stretch_radial[-1]*self.thickness_outer[-1]
+        self.thickness_outer_ES = thickness.copy()
         
-        coord,point = self.surfaceGeneration(sliceNum=sliceNum, slicePoint=slicePoint, sliceRadius=sliceRadius_outer, sliceInterval=sliceInterval)
+        shellPoint = self.shellPoint_ES.copy()
+        #radialDirection = self.radialDirection(shellPoint)
+        #radialDirection = radialDirection *(-1)
+        radialDirection = self.radialDirection_outer.copy()
+        outerPoint = np.zeros(np.shape(shellPoint))
+        outerPoint[:-1,0] = self.thickness_outer_ES[:-1]*radialDirection[:,0] + shellPoint[:-1,0]
+        outerPoint[:-1,2] = self.thickness_outer_ES[:-1]*radialDirection[:,1] + shellPoint[:-1,2]
+        outerPoint[-1,2] = -1*self.thickness_outer_ES[-1] + shellPoint[-1,2]
         
-        temp = self.shellCoord_ES[0,2]-coord[0,2]
-        coord[:,2] = coord[:,2] + temp
-        point[:,2] = point[:,2] + temp
-#        coord[:,2] = coord[:,2] + self.innerCoord[-1,2]
-#        point[:,2] = point[:,2] + self.innerCoord[-1,2]
-        self.sliceRadius_outer_ES = sliceRadius_outer.copy()
-        self.sliceInterval_outer_ES = sliceInterval.copy()
+        self.sliceRadius_outer_ES = np.array(outerPoint[:,0]).copy()
+        
+        z = outerPoint[-1,2]
+        sliceInterval_outer = outerPoint[:-1,2] - outerPoint[1:,2]
+        self.sliceInterval_outer_ES = sliceInterval_outer.copy()
+        
+        coord,point = self.surfaceGeneration(sliceNum=self.sliceNum_outer, slicePoint=self.slicePoint_outer, sliceRadius=self.sliceRadius_outer_ES, sliceInterval=self.sliceInterval_outer_ES)
+        coord[:,2] = coord[:,2] + z
+        point[:,2] = point[:,2] + z
         self.outerCoord_ES = coord.copy()
         self.outerPoint_ES = point.copy()
+        
+        return 0    # normal return
     
     def distCalc(self,coordA=None, coordB=None, mode='min'):
         '''
@@ -525,32 +559,6 @@ class shellModel:
         volumeTotal = np.sum(volume)
         return volumeTotal
     
-    def simpleStretch(self, sliceNum=None, slicePoint=None, sliceRadius=None, sliceInterval=None, sliceStretch=None):
-        '''
-        simple stretch: change interval (first) and radius to achieve movement
-        sliceStretch: stretch values for each slice or each point, [n, 2]
-        '''
-        if type(sliceNum)==type(None):
-            sliceNum = self.sliceNum
-        if type(slicePoint)==type(None):
-            slicePoint = self.slicePoint.copy()
-        if type(sliceRadius)==type(None):
-            sliceRadius = self.sliceRadius.copy()
-        if type(sliceInterval)==type(None):
-            sliceInterval = self.sliceInterval.copy()
-            
-        sliceRadius_new = sliceRadius.copy()
-        sliceInterval_new = sliceInterval.copy()
-        
-        for i in range(sliceNum-1):
-            sliceInterval_new[i] = sliceInterval[i]*sliceStretch[i,0]
-            sliceRadius_new[i] = sliceRadius[i]*sliceStretch[i,1]
-            
-        coord,point = self.surfaceGeneration(sliceNum=sliceNum, slicePoint=slicePoint, sliceRadius=sliceRadius_new, sliceInterval=sliceInterval_new)
-#        self.shellCoord_ES = coord.copy()
-#        self.shellPoint_ES = point.copy()
-        return sliceInterval_new, sliceRadius_new, coord, point
-            
     def stretchMotion(self,coord=None, sliceNum=None, slicePoint=None, sliceRadius=None, sliceInterval=None, stretchMode='lcr', sliceStretch=None):
         '''
         unfinished
@@ -579,6 +587,7 @@ class shellModel:
         calculate stretch and strain
         strain_type: 'green' strain or 'engineering' strain
         strain_border: longitudinal strain calculated by total length if True
+        
         '''
         if type(point_ED)==type(None):
             point_ED = self.shellPoint.copy()
@@ -620,6 +629,8 @@ class shellModel:
             strain_longit = stretch_longit-1
             strain_circum = stretch_circum-1
             strain_radial = stretch_radial-1
+        else:
+            print('Please input green or engineering for strain_type')
         
         temp = np.concatenate((stretch_longit,stretch_circum,stretch_radial))
         temp2 = temp.reshape((-1,3), order='F')
@@ -673,7 +684,7 @@ class shellModel:
         sliceInterval_new, sliceRadius_new, coord, point = self.simpleStretch(sliceStretch=sliceStretch)
         return sliceInterval_new, sliceRadius_new, coord, point
     
-    def borderEndSystoleSolver(self, surface='inner', volume=None, stretch_radial=None, error=0.005, inc=0.1, minVolume=300, mode='smooth', stlName=None, sliceNum=None, slicePoint=None, sliceRadius=None, sliceInterval=None):
+    def borderEndSystoleSolver(self, surface='inner', volume=None, stretch_radial=None, error=0.005, inc=0.1, minVolume=200, mode='smooth', stlName=None, sliceNum=None, slicePoint=None, sliceRadius=None, sliceInterval=None):
         '''
         achieve myocardium incompressibility by reducing the volume error
         adjust stretch_radial to achieve
@@ -685,16 +696,18 @@ class shellModel:
         if type(stretch_radial)==type(None):
             stretch_radial = self.shellStretch[:,2].copy()     # bigger stretch_radial, bigger volume_myoc
         
-        volume_ES = float('inf')    # avoid accident like 0
+        volume_ES = float('-inf')    # avoid accident like 0
         error_ite = (volume_myoc-abs(volume[1]-volume_ES))/volume_myoc
         while abs(error_ite)>error:
             if surface=='inner':
-                index = self.innerSurface_ES(stretch_radial = stretch_radial, mode=mode)
-                if index == 1:      # special return, stop iteration
-                    return volume_ES
+                self.innerSurface_ES(stretch_radial = stretch_radial, mode=mode)
+#                index = self.innerSurface_ES(stretch_radial = stretch_radial, mode=mode)
+#                if index == 1:      # special return, stop iteration
+#                    return volume_ES
                 coord,connect = self.STLgeneration(coord=self.innerCoord_ES, sliceNum=self.sliceNum_inner, slicePoint=self.slicePoint_inner,stlName = stlName)
                 volume_ES = self.STLvolume(coord=coord,connect=connect)
-                if volume_ES<=minVolume:
+                if volume_ES<=minVolume and error_ite>0:
+                #if volume_ES<=minVolume:
                     return volume_ES
             elif surface =='outer':
                 self.outerSurface_ES(stretch_radial = stretch_radial)
@@ -710,23 +723,30 @@ class shellModel:
                 positive = True
                 try:
                     if positive==positive_backup:
-                        pass
+                        #inc = inc*0.8
+                        stretch_radial = stretch_radial*(1.0+inc*0.1)
+                        #pass
                     else:
-                        inc = inc*0.8
+                        inc = inc*0.6
+                        stretch_radial = stretch_radial*(1.0+inc)
                 except:
-                    pass
-                stretch_radial = stretch_radial*(1.0+inc)
+                    stretch_radial = stretch_radial*(1.0+inc)
+                    #pass
                 
             else:
                 positive = False
                 try:
                     if positive==positive_backup:
-                        pass
+                        #inc = inc*0.8
+                        stretch_radial = stretch_radial*(1.0-inc*0.1)
+                        #pass
                     else:
-                        inc = inc*0.8
+                        inc = inc*0.6
+                        stretch_radial = stretch_radial*(1.0-inc)
                 except:
-                    pass
-                stretch_radial = stretch_radial*(1.0-inc)
+                    stretch_radial = stretch_radial*(1.0-inc)
+                    #pass
+                
             positive_backup = positive
         
         #stretch, strain = self.strainCalculation(point_ED= self.innerPoint, point_ES = self.innerPoint_ES)
@@ -755,6 +775,7 @@ class shellModel:
                 except:
                     pass
         return temp
+    
     
 
 
