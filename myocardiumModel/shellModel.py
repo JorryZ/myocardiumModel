@@ -14,8 +14,9 @@ History:
   Author: jorry.zhengyu@gmail.com         26AUGU2020           -V1.0.1, release version, improve innerSurface_ES function to solve inner_ES STL volume error, point_ES error
   Author: jorry.zhengyu@gmail.com         29AUGU2020           -V1.0.2, release version, add thickRatio for inner and outer ED surface for thickness ajustment, different strain calculation
   Author: jorry.zhengyu@gmail.com         05Sept2020           -V2.0.0 Algorithm improvement, test version, radial direction using shell surface normal
+  Author: jorry.zhengyu@gmail.com         11Sept2020           -V2.0.1 inner ES smoothing improvement
 """
-print('shellModel release version 2.0.0')
+print('shellModel release version 2.0.1')
 
 #import os
 import sys
@@ -277,11 +278,11 @@ class shellModel:
         
         print('innerSurface ED completed >_<')
     
-    def innerSurface_ES(self,sliceNum=None, slicePoint=None, stretch_radial=None, mode='smooth'):
+    def innerSurface_ES(self,sliceNum=None, slicePoint=None, stretch_radial=None, mode='smooth', radialDir = 'ES', smoothInit = [5,0], ratio=0.9):
         '''
         simplified inner surface motion, use radial stretch to calculate radius (not same direction, especially apical part)
-        mode: 'shape' to maintain the ES inner surface length, 'smooth' to obtain smoother ES inner STL
-        to improve apex shape
+        # mode: 'shape' to maintain the ES inner surface length, 'smooth' to obtain smoother ES inner STL to improve apex shape
+        radialDir: radial direction use 'ED' middle surface normal or 'ES' middle surface normal
         '''
         if type(sliceNum)==type(None):
             sliceNum = self.sliceNum_inner
@@ -296,54 +297,136 @@ class shellModel:
         self.thickness_inner_ES = thickness.copy()
         
         shellPoint = self.shellPoint_ES.copy()
-        #radialDirection = self.radialDirection(shellPoint)     # shell ES surface normal
-        radialDirection = self.radialDirection_inner.copy()     # shell ES surface normal
+        
+        if radialDir == 'ED':
+            radialDirection = self.radialDirection_inner.copy()     # shell ED surface normal
+        elif radialDir == 'ES':
+            radialDirection = self.radialDirection(shellPoint)     # shell ES surface normal
+        else:
+            print('Error: radialDIR input "ED" or "ES"')
+            sys.exit()
         innerPoint = np.zeros(np.shape(shellPoint))
         innerPoint[:-1,0] = self.thickness_inner_ES[:-1]*radialDirection[:,0] + shellPoint[:-1,0]
         innerPoint[:-1,2] = self.thickness_inner_ES[:-1]*radialDirection[:,1] + shellPoint[:-1,2]
         innerPoint[-1,2] = self.thickness_inner_ES[-1] + shellPoint[-1,2]
         
+        if innerPoint[0,0] <= 0:
+            flag = 5
+            return flag
         
+        # innerPoint X smoothing for bad condition
+        flag = 0
+        flag_X = 1
+        while(flag_X!=0):
+            sliceBad = []
+            temp = innerPoint[smoothInit[0]:-1,0] - innerPoint[(smoothInit[0]+1):,0]
+            for i in range(len(temp)):
+                if temp[i]<=0:
+                    sliceBad.append(smoothInit[0]+1+i)
+    #                sliceBad = i+3
+                    flag_X = 1
+                    flag = 1
+            for i in range(len(innerPoint)-1):
+                if innerPoint[i,0]<=0:
+                    sliceBad = []
+                    sliceBad.append(i)
+                    flag_X = 2
+                    flag = 2
+                    break
+            if len(sliceBad)==0:
+                flag_X = 0
+            if flag_X == 1:
+                sliceBad = np.flip(np.array(sliceBad))
+                for i in range(len(sliceBad)):
+                    if sliceBad[i]< len(innerPoint)-2:
+                        innerPoint[sliceBad[i],0] = (innerPoint[sliceBad[i]+2,0]+innerPoint[sliceBad[i]-1,0]+innerPoint[sliceBad[i],0]+innerPoint[sliceBad[i]+1,0]+innerPoint[sliceBad[i]+2,0])/5
+                    elif sliceBad[i]== len(innerPoint)-2:
+                        innerPoint[sliceBad[i],0] = (innerPoint[sliceBad[i]-1,0]+innerPoint[sliceBad[i],0]+innerPoint[sliceBad[i]+1,0])/3
+            elif flag_X==2:
+                for i in range(sliceBad[0], len(innerPoint)):
+                    innerPoint[i,0] = self.innerPoint[i,0] * innerPoint[sliceBad[0]-1,0]/self.innerPoint[sliceBad[0]-1,0]
+        '''
+        # innerPoint Z smoothing for bad condition
+        flag_Z = 1
+        while(flag_Z!=0):
+            sliceBad = []
+            temp = innerPoint[smoothInit[1]:-1,2] - innerPoint[(smoothInit[1]+1):,2]
+            for i in range(len(temp)):
+                if temp[i]<=0:
+                    sliceBad.append(smoothInit[1]+1+i)
+                    flag_Z = 1
+                    if flag!= 0:
+                        flag = 4
+                    else:
+                        flag = 3
+            if len(sliceBad)==0:
+                flag_Z = 0
+            if flag_Z == 1:
+                for i in range(len(sliceBad)):
+                    if sliceBad[i]==len(innerPoint)-1:
+                        innerPoint[sliceBad[i]-1,2] = innerPoint[sliceBad[i]-2,2]*1/3+innerPoint[sliceBad[i],2]*2/3
+                    else:
+                        innerPoint[sliceBad[i],2] = innerPoint[sliceBad[i]-1,2]*1/3+innerPoint[sliceBad[i]+1,2]*2/3
+        '''
+        
+        '''
         flag = 0    # condition of innerPoint change, 0 no change, 1 only change X, 2 only change Z, 3 change both X and Z
         
         # innerPoint X ajustment for bad condition
         sliceBad = len(innerPoint)
-        for i in range(len(innerPoint)-1):
-            if innerPoint[i,0]<=0:
-                sliceBad = i
         
-        temp = innerPoint[2:-1,0] - innerPoint[3:,0]
+        temp = innerPoint[smoothInit[0]:-1,0] - innerPoint[smoothInit[0]+1:,0]
         for i in range(len(temp)):
+            #if temp[i]<=0 and abs(temp[i]/innerPoint[i,0])>0.01:
             if temp[i]<=0:
-                sliceBad = np.min([sliceBad, i+3])
+                sliceBad = np.min([sliceBad, smoothInit[0]+i])
 #                sliceBad = i+3
                 flag = 1
                 break
         
+        for i in range(len(innerPoint)-1):
+            if innerPoint[i,0]<=0:
+                sliceBad = i
+                flag = 2
+                break
+
+        
         if sliceBad < len(innerPoint):
-            for i in range(sliceBad, len(innerPoint)):
-                #innerPoint[i,0] = self.shellPoint_ES[i,0] * innerPoint[sliceBad-1,0]/self.shellPoint_ES[sliceBad-1,0]
+            for i in range(sliceBad-1, len(innerPoint)):
                 innerPoint[i,0] = self.innerPoint[i,0] * innerPoint[sliceBad-1,0]/self.innerPoint[sliceBad-1,0]
+#                temp = 0.5
+#                temp2 = innerPoint[i,0]
+#                while(innerPoint[i,0]>=innerPoint[i-1,0]):
+#                #innerPoint[i,0] = self.shellPoint_ES[i,0] * innerPoint[sliceBad-1,0]/self.shellPoint_ES[sliceBad-1,0]
+#                    temp = temp*ratio
+#                    innerPoint[i,0] = (self.innerPoint[i,0] * innerPoint[sliceBad-1,0]/self.innerPoint[sliceBad-1,0])*(1-temp) + temp2*temp
+        '''
         
         # innerPoint Z ajustment for bad condition
         # test
         sliceBad2 = len(innerPoint)
-        temp = innerPoint[2:-1,2] - innerPoint[3:,2]
+        temp = innerPoint[smoothInit[1]:-1,2] - innerPoint[(smoothInit[1]+1):,2]
         for i in range(len(temp)):
             if temp[i]<=0:
-                sliceBad2 = np.min([sliceBad2, i+3])
+                sliceBad2 = np.min([sliceBad2, smoothInit[1]+i])
                 if flag == 0:
-                    flag = 2
-                else:
                     flag = 3
+                else:
+                    flag = 4
 #                sliceBad = i+3
                 break
         if sliceBad2 < len(innerPoint):
             # adustment 1, fixed apex point
-            for i in range(sliceBad2-3, len(innerPoint)-1):
-                #temp = (innerPoint[i-1,2] - innerPoint[-1,2])*(self.shellPoint_ES[i,2] - self.shellPoint_ES[-1,2])/(self.shellPoint_ES[i-1,2] - self.shellPoint_ES[-1,2])
-                temp = (innerPoint[i-1,2] - innerPoint[-1,2])*(self.innerPoint[i,2] - self.innerPoint[-1,2])/(self.innerPoint[i-1,2] - self.innerPoint[-1,2])
-                innerPoint[i,2] = innerPoint[-1,2] + temp
+            for i in range(sliceBad2-1, len(innerPoint)-1):
+                dist = (innerPoint[i-1,2] - innerPoint[-1,2])*(self.innerPoint[i,2] - self.innerPoint[-1,2])/(self.innerPoint[i-1,2] - self.innerPoint[-1,2])
+                innerPoint[i,2] = innerPoint[-1,2] + dist
+#                temp = 0.5
+#                temp2 = innerPoint[i,2] - innerPoint[-1,2]
+#                while(innerPoint[i,0]>=innerPoint[i-1,0]):
+#                    temp = temp*ratio
+#                    #dist = (innerPoint[i-1,2] - innerPoint[-1,2])*(self.shellPoint_ES[i,2] - self.shellPoint_ES[-1,2])/(self.shellPoint_ES[i-1,2] - self.shellPoint_ES[-1,2])
+#                    dist = ((innerPoint[i-1,2] - innerPoint[-1,2])*(self.innerPoint[i,2] - self.innerPoint[-1,2])/(self.innerPoint[i-1,2] - self.innerPoint[-1,2]))*(1-temp) + temp2*temp
+#                    innerPoint[i,2] = innerPoint[-1,2] + dist
             # adustment 2
 #            for i in range(sliceBad2-1, len(innerPoint)):
 #                #temp = (innerPoint[i-2,2] - innerPoint[i-1,2])*(self.shellPoint_ES[i-1,2] - self.shellPoint_ES[i,2])/(self.shellPoint_ES[i-2,2] - self.shellPoint_ES[i-1,2])
@@ -413,7 +496,7 @@ class shellModel:
         
         print('outerSurface ED completed >_<')
     
-    def outerSurface_ES(self,sliceNum=None, slicePoint=None, stretch_radial=None, mode='smooth'):
+    def outerSurface_ES(self,sliceNum=None, slicePoint=None, stretch_radial=None, mode='smooth', radialDir = 'ES'):
         '''
         simplified outer surface motion, use radial stretch to calculate radius (not same direction, especially apical part)
         mode: 'shape' to maintain the ES outer surface length, 'smooth' to obtain smoother ES outer STL
@@ -431,10 +514,19 @@ class shellModel:
         thickness[-1] = stretch_radial[-1]*self.thickness_outer[-1]
         self.thickness_outer_ES = thickness.copy()
         
+        
         shellPoint = self.shellPoint_ES.copy()
         #radialDirection = self.radialDirection(shellPoint)
         #radialDirection = radialDirection *(-1)
-        radialDirection = self.radialDirection_outer.copy()
+        if radialDir == 'ED':
+            radialDirection = self.radialDirection_outer.copy()     # shell ED surface normal
+        elif radialDir == 'ES':
+            radialDirection = self.radialDirection(shellPoint)     # shell ES surface normal
+            radialDirection = radialDirection *(-1)
+        else:
+            print('Error: radialDIR input "ED" or "ES"')
+            sys.exit()
+        
         outerPoint = np.zeros(np.shape(shellPoint))
         outerPoint[:-1,0] = self.thickness_outer_ES[:-1]*radialDirection[:,0] + shellPoint[:-1,0]
         outerPoint[:-1,2] = self.thickness_outer_ES[:-1]*radialDirection[:,1] + shellPoint[:-1,2]
@@ -678,13 +770,14 @@ class shellModel:
             temp2 = (stretch_longit**2)*temp-(stretch_circum*point1[0]-stretch_circum*point2[0])**2     # (z direction disctance) **2
             
             if temp2<=0:
+                # apical part may have bad motion
                 sliceStretch[i,0] = sliceStretch[i-1,0]
             else:
                 sliceStretch[i,0] = (temp2**0.5)/abs(point2[2])
         sliceInterval_new, sliceRadius_new, coord, point = self.simpleStretch(sliceStretch=sliceStretch)
         return sliceInterval_new, sliceRadius_new, coord, point
     
-    def borderEndSystoleSolver(self, surface='inner', volume=None, stretch_radial=None, error=0.005, inc=0.1, minVolume=200, mode='smooth', stlName=None, sliceNum=None, slicePoint=None, sliceRadius=None, sliceInterval=None):
+    def borderEndSystoleSolver(self, surface='inner', volume=None, stretch_radial=None, error=0.005, inc=0.1, minDiff=0.0001, minVolume=200, mode='smooth', radialDir = 'ES', stlName=None, sliceNum=None, slicePoint=None, sliceRadius=None, sliceInterval=None):
         '''
         achieve myocardium incompressibility by reducing the volume error
         adjust stretch_radial to achieve
@@ -698,9 +791,19 @@ class shellModel:
         
         volume_ES = float('-inf')    # avoid accident like 0
         error_ite = (volume_myoc-abs(volume[1]-volume_ES))/volume_myoc
+        stretch_radial_backup1 = stretch_radial.copy()
+        Incre_max = stretch_radial.copy()*0
+        Decre_min = stretch_radial.copy()*100
+        
         while abs(error_ite)>error:
             if surface=='inner':
-                self.innerSurface_ES(stretch_radial = stretch_radial, mode=mode)
+                flag = self.innerSurface_ES(stretch_radial = stretch_radial, mode=mode, radialDir=radialDir)
+                if flag == 5:
+                    if positive == True:
+                        stretch_radial = stretch_radial/(1.0+inc)
+                        inc = inc*0.9
+                        stretch_radial = stretch_radial*(1.0+inc)
+                        continue
 #                index = self.innerSurface_ES(stretch_radial = stretch_radial, mode=mode)
 #                if index == 1:      # special return, stop iteration
 #                    return volume_ES
@@ -710,15 +813,59 @@ class shellModel:
                 #if volume_ES<=minVolume:
                     return volume_ES
             elif surface =='outer':
-                self.outerSurface_ES(stretch_radial = stretch_radial)
+                self.outerSurface_ES(stretch_radial = stretch_radial, radialDir=radialDir)
                 coord,connect = self.STLgeneration(coord=self.outerCoord_ES, sliceNum=self.sliceNum_outer, slicePoint=self.slicePoint_outer,stlName = stlName)
                 volume_ES = self.STLvolume(coord=coord,connect=connect)
             else:
                 print('input surface error: inner or outer!')
                 sys.exit()
-            error_ite = (volume_myoc-abs(volume[1]-volume_ES))/volume_myoc
-            stretch_radial_backup = stretch_radial
             
+            error_ite = (volume_myoc-abs(volume[1]-volume_ES))/volume_myoc
+            #stretch_radial_backup = stretch_radial
+            #print('error_ite: ',error_ite, '; stretch_radial:',stretch_radial[0], '; Incre:',Incre_max[0])
+            
+            # interation method 1
+            if volume_myoc-abs(volume[1]-volume_ES)>0:
+                positive = True
+                if stretch_radial[0] > Incre_max[0]:
+                    Incre_max = stretch_radial.copy()
+                try:
+                    if positive==positive_backup:
+                        #inc = inc*0.8
+                        stretch_radial = stretch_radial*(1.0+inc)
+                        #pass
+                    else:
+                        inc = inc*0.9
+                        stretch_radial = (Incre_max+Decre_min)/2
+                        #stretch_radial = (stretch_radial_backup2+stretch_radial_backup1)/2
+                except:
+                    stretch_radial = stretch_radial*(1.0+inc)
+                    #pass
+                
+            else:
+                positive = False
+                if stretch_radial[0] < Decre_min[0]:
+                    Decre_min = stretch_radial.copy()
+                try:
+                    if positive==positive_backup:
+                        #inc = inc*0.8
+                        stretch_radial = stretch_radial*(1.0-inc*0.1)
+                        #pass
+                    else:
+                        inc = inc*0.9
+                        stretch_radial = (Incre_max+Decre_min)/2
+                        #stretch_radial = (stretch_radial_backup2+stretch_radial_backup1)/2
+                except:
+                    stretch_radial = stretch_radial*(1.0-inc)
+                    #pass
+            if abs(Decre_min[0]-Incre_max[0])<minDiff:      # due to surface smoothing, volume change is not continuous sometime
+                return volume_ES
+            positive_backup = positive
+            #stretch_radial_backup2 = stretch_radial_backup1.copy()
+            #stretch_radial_backup1 = stretch_radial.copy()
+            
+            '''
+            # interation method 2
             if volume_myoc-abs(volume[1]-volume_ES)>0:
                 positive = True
                 try:
@@ -748,7 +895,8 @@ class shellModel:
                     #pass
                 
             positive_backup = positive
-        
+            '''
+            
         #stretch, strain = self.strainCalculation(point_ED= self.innerPoint, point_ES = self.innerPoint_ES)
         return volume_ES
     
