@@ -14,7 +14,9 @@ History:
   Author: jorry.zhengyu@gmail.com         29AUGU2020             -V1.0.2 release version
                                                         -shellModel version 1.0.2  
   Author: jorry.zhengyu@gmail.com         05Sept2020             -V2.0.0 test version
-                                                        -shellModel version 2.0.0                                                 
+                                                        -shellModel version 2.0.0        
+  Author: jorry.zhengyu@gmail.com         11Sept2020             -V2.0.1 test version
+                                                        -shellModel version 2.0.1                                    
                                                         
 Requirements:
     numpy
@@ -23,7 +25,7 @@ Requirements:
     meshplex
 All rights reserved.
 """
-_version='2.0.0'
+_version='2.0.1'
 print('myocardiumModel version',_version)
 
 import os
