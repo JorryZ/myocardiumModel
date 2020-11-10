@@ -2,13 +2,13 @@ from setuptools import setup
 setup(
   name = 'myocardiumModel',         # How you named your package folder (MyLib)
   packages = ['myocardiumModel'],   # Chose the same as "name"
-  version = '2.0.1',      # Start with a small number and increase it with every change you make
+  version = '2.0.3',      # Start with a small number and increase it with every change you make
   license='MIT',        # Chose a license from here: https://help.github.com/articles/licensing-a-repository
   description = 'simplified myocardium motion model',   # Give a short description about your library
   author = 'Yu Zheng',                   # Type in your name
   author_email = 'jorry.zhengyu@gmail.com',      # Type in your E-Mail
   url = 'https://github.com/JorryZ/myocardiumModel',   # Provide either the link to your github or to your website
-  download_url = 'https://github.com/JorryZ/myocardiumModel/archive/v2.0.1.tar.gz',    # I explain this later on
+  download_url = 'https://github.com/JorryZ/myocardiumModel/archive/v2.0.3.tar.gz',    # I explain this later on
   keywords = ['myocardium', 'motion', 'shell model'],   # Keywords that define your package best
   install_requires=['numpy','scipy','trimesh','meshplex'],
   classifiers=[
