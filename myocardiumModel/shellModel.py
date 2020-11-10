@@ -15,8 +15,10 @@ History:
   Author: jorry.zhengyu@gmail.com         29AUGU2020           -V1.0.2, release version, add thickRatio for inner and outer ED surface for thickness ajustment, different strain calculation
   Author: jorry.zhengyu@gmail.com         05Sept2020           -V2.0.0 Algorithm improvement, test version, radial direction using shell surface normal
   Author: jorry.zhengyu@gmail.com         11Sept2020           -V2.0.1 inner ES smoothing improvement
+  Author: jorry.zhengyu@gmail.com         16Sept2020           -V2.0.2 inner ES smoothing improvement
+  Author: jorry.zhengyu@gmail.com         10Nov2020            -V2.0.3 add engineering strain as input and output
 """
-print('shellModel release version 2.0.1')
+print('shellModel release version 2.0.3')
 
 #import os
 import sys
@@ -332,6 +334,14 @@ class shellModel:
                     sliceBad.append(i)
                     flag_X = 2
                     flag = 2
+                    
+#                    # Z length reduction
+#                    length_reduce = innerPoint[i,2] - innerPoint[-1,2]
+#                    length = innerPoint[0,2] - innerPoint[-1,2]
+#                    for j in range(len(innerPoint)-1):
+#                        dec = abs(innerPoint[0,2] - innerPoint[j+1,2])/length * length_reduce
+#                        innerPoint[j+1,2] = innerPoint[j+1,2] + dec
+#                    print('z adustment')
                     break
             if len(sliceBad)==0:
                 flag_X = 0
@@ -344,7 +354,10 @@ class shellModel:
                         innerPoint[sliceBad[i],0] = (innerPoint[sliceBad[i]-1,0]+innerPoint[sliceBad[i],0]+innerPoint[sliceBad[i]+1,0])/3
             elif flag_X==2:
                 for i in range(sliceBad[0], len(innerPoint)):
-                    innerPoint[i,0] = self.innerPoint[i,0] * innerPoint[sliceBad[0]-1,0]/self.innerPoint[sliceBad[0]-1,0]
+                    if sliceBad[0]-3 >= 0:
+                        innerPoint[i,0] = self.innerPoint[i,0] * innerPoint[sliceBad[0]-3,0]/self.innerPoint[sliceBad[0]-3,0]
+                    else:
+                        innerPoint[i,0] = self.innerPoint[i,0] * innerPoint[sliceBad[0]-1,0]/self.innerPoint[sliceBad[0]-1,0]
         '''
         # innerPoint Z smoothing for bad condition
         flag_Z = 1
@@ -735,9 +748,10 @@ class shellModel:
         print('strain calculated >_<')
         return stretch, strain
     
-    def shellEndSystoleSolver(self, strain=None, sliceNum=None, slicePoint=None, sliceRadius=None, sliceInterval=None, sliceStretch=None):
+    def shellEndSystoleSolver(self, strain=None, strain_type = 'green', sliceNum=None, slicePoint=None, sliceRadius=None, sliceInterval=None, sliceStretch=None):
         '''
         control longit. and radial stretch to obtain specific longitudinal and circumferential strain [A,B]
+        strain_type: green or engineering strain as input
         '''
         if type(sliceNum)==type(None):
             sliceNum = self.sliceNum
@@ -749,10 +763,17 @@ class shellModel:
             sliceInterval = self.sliceInterval.copy()
         
         strain_circum = strain[1]
-        stretch_circum = (2*strain_circum+1)**0.5
+        if strain_type == 'green':
+            stretch_circum = (2*strain_circum+1)**0.5
+        elif strain_type == 'engineering':
+            stretch_circum = strain_circum+1
         
         strain_longit = strain[0]
-        stretch_longit = (2*strain_longit+1)**0.5
+        if strain_type == 'green':
+            stretch_longit = (2*strain_longit+1)**0.5
+        elif strain_type == 'engineering':
+            stretch_longit = strain_longit+1
+        
         sliceStretch = np.zeros((sliceNum-1,2))
         sliceStretch[:,1] = stretch_circum
         
@@ -821,6 +842,8 @@ class shellModel:
                 sys.exit()
             
             error_ite = (volume_myoc-abs(volume[1]-volume_ES))/volume_myoc
+            if math.isnan(error_ite):
+                self.flag = 6   # volume calculation error due to sharp apex
             #stretch_radial_backup = stretch_radial
             #print('error_ite: ',error_ite, '; stretch_radial:',stretch_radial[0], '; Incre:',Incre_max[0])
             
